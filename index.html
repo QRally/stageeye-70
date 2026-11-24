@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en-GB" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>StageEye AI — Roadside Vision &amp; GPS Telemetry</title>
+
+  <!-- Tailwind CSS for responsive OLED cockpit UI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+          },
+          colors: {
+            oled: '#000000',
+            panel: '#0B0D10',
+            panelBorder: '#1E242D',
+            amberRally: '#F59E0B',
+            redRally: '#EF4444',
+            greenRally: '#10B981'
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Fonts: Inter & JetBrains Mono for crisp telemetry digits -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
+
+  <!-- TensorFlow.js & COCO-SSD Object Detection Model (Browser Edge Inference) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+  <style>
+    /* Custom OLED range slider styling for gloved/in-car touch control */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 10px;
+      border-radius: 9999px;
+      background: #1E242D;
+      border: 1px solid #2D3644;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: -8px;
+      background-color: #F59E0B;
+      height: 24px;
+      width: 24px;
+      border-radius: 9999px;
+      border: 2px solid #000000;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+    }
+    input[type="range"]::-moz-range-track {
+      height: 10px;
+      border-radius: 9999px;
+      background: #1E242D;
+      border: 1px solid #2D3644;
+    }
+    input[type="range"]::-moz-range-thumb {
+      background-color: #F59E0B;
+      height: 24px;
+      width: 24px;
+      border-radius: 9999px;
+      border: 2px solid #000000;
+    }
+
+    /* Subtle pulse for active detection border flash */
+    @keyframes hazardFlash {
+      0% { box-shadow: inset 0 0 0 4px rgba(239, 68, 68, 0.95); }
+      100% { box-shadow: inset 0 0 0 0px rgba(239, 68, 68, 0); }
+    }
+    .flash-alert {
+      animation: hazardFlash 0.65s ease-out;
+    }
+  </style>
+</head>
+
+<body class="bg-oled text-zinc-100 font-sans antialiased selection:bg-amberRally selection:text-black min-h-screen flex flex-col">
+
+  <!-- TOP COCKPIT HEADER & SYSTEM STATUS BAR -->
+  <header class="sticky top-0 z-30 bg-oled/95 backdrop-blur border-b border-panelBorder px-3 py-2.5 sm:px-5">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <!-- Brand / Stage Title -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-amberRally/15 border border-amberRally/40 flex items-center justify-center text-amberRally">
+          <!-- Rally Crosshair / Vision SVG Icon -->
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+            <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+            <circle cx="12" cy="10" r="2.5" />
+            <path d="M7.5 18c.8-2.3 2.5-3.5 4.5-3.5s3.7 1.2 4.5 3.5" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white">STAGE<span class="text-amberRally">EYE</span> AI</h1>
+            <span class="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">EDGE v1.0</span>
+          </div>
+          <p class="text-[11px] text-zinc-400 hidden sm:block">On-Device Roadside Person Detection &amp; GPS Telemetry</p>
+        </div>
+      </div>
+
+      <!-- Live System Health Pills (Model / Camera / GPS) -->
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-mono">
+        <span id="badge-model" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-amberRally/40 text-amberRally">
+          <span class="w-2 h-2 rounded-full bg-amberRally animate-pulse"></span>
+          <span>AI: LOADING</span>
+        </span>
+        <span id="badge-cam" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-panelBorder text-zinc-400">
+          <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
+          <span>CAM: STANDBY</span>
+        </span>
+        <span id="badge-gps" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-panelBorder text-zinc-400">
+          <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
+          <span>GPS: WAITING</span>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- NON-INTRUSIVE MESSAGE / HTTPS & PERMISSION WARNING BANNER -->
+  <div id="status-banner" class="hidden max-w-6xl w-full mx-auto px-3 sm:px-5 pt-3">
+    <div id="status-banner-inner" class="rounded-xl border border-amberRally/50 bg-amberRally/10 px-4 py-3 text-xs sm:text-sm text-amber-200 flex items-start justify-between gap-3">
+      <div class="flex items-start gap-2.5">
+        <svg class="w-5 h-5 text-amberRally shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86l-8.4 14.53A1.75 1.75 0 003.4 21h17.2a1.75 1.75 0 001.51-2.61l-8.4-14.53a1.75 1.75 0 00-3.02 0z" />
+        </svg>
+        <div id="status-banner-text" class="leading-relaxed"></div>
+      </div>
+      <button onclick="hideBanner()" class="text-amberRally hover:text-white font-bold px-2 py-1 rounded-lg">✕</button>
+    </div>
+  </div>
+
+  <!-- MAIN COCKPIT GRID -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-5 py-3 sm:py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- LEFT / TOP COLUMN: LIVE CAMERA VIEWPORT + TELEMETRY STRIP -->
+    <section class="lg:col-span-8 flex flex-col gap-3">
+
+      <!-- Camera + Canvas Overlay Container -->
+      <div id="viewport-shell" class="relative w-full aspect-video bg-panel rounded-2xl border border-panelBorder overflow-hidden shadow-2xl flex items-center justify-center">
+        <!-- Rear Camera Video Element -->
+        <video id="camera-video" class="w-full h-full object-cover hidden" playsinline muted autoplay></video>
+
+        <!-- Transparent AI Bounding Box Overlay Canvas -->
+        <canvas id="overlay-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+
+        <!-- Top-Left HUD Overlay inside Camera -->
+        <div id="hud-overlay" class="hidden absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+          <div class="flex items-center gap-2 bg-black/75 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl">
+            <span id="live-rec-dot" class="w-2.5 h-2.5 rounded-full bg-greenRally animate-pulse"></span>
+            <span id="hud-state-text" class="font-mono text-xs font-bold tracking-wider text-white">SCANNING ROAD AHEAD</span>
+          </div>
+          <div class="bg-black/75 backdrop-blur-md border border-white/15 px-2.5 py-1.5 rounded-xl font-mono text-xs text-zinc-300">
+            <span id="hud-fps">0.0</span> FPS
+          </div>
+        </div>
+
+        <!-- Bottom-Left Cooldown Indicator inside Camera -->
+        <div id="cooldown-pill" class="hidden absolute bottom-3 left-3 bg-amberRally/90 text-black font-mono text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-lg">
+          COOLDOWN: <span id="cooldown-remaining">0.0</span>s
+        </div>
+
+        <!-- Standby Launch Overlay (Shown before Start Run is tapped) -->
+        <div id="standby-overlay" class="p-6 text-center max-w-md flex flex-col items-center gap-4">
+          <div class="w-16 h-16 rounded-2xl bg-amberRally/15 border border-amberRally/40 flex items-center justify-center text-amberRally">
+            <svg class="w-9 h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-lg sm:text-xl font-bold text-white">Mount Phone &amp; Start Stage Run</h2>
+            <p class="text-xs sm:text-sm text-zinc-400 mt-1 leading-relaxed">
+              Uses your rear camera, browser AI, and GPS locally on this device. No video is uploaded to the cloud.
+            </p>
+          </div>
+          <button id="btn-start-overlay" onclick="toggleRun()" disabled
+            class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-amberRally hover:bg-amber-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-extrabold text-sm sm:text-base tracking-wide transition shadow-lg">
+            LOADING AI MODEL...
+          </button>
+        </div>
+      </div>
+
+      <!-- HIGH-CONTRAST TELEMETRY READOUT STRIP -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <!-- Live Speed (MPH) -->
+        <div class="bg-panel border border-panelBorder rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Speed</span>
+          <div class="flex items-baseline gap-1.5 mt-1">
+            <span id="tel-speed" class="font-mono text-3xl sm:text-4xl font-extrabold text-white tracking-tight">--</span>
+            <span class="font-mono text-xs font-bold text-amberRally">MPH</span>
+          </div>
+        </div>
+
+        <!-- Sightings Counter -->
+        <div class="bg-panel border border-panelBorder rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Logged Hits</span>
+          <div class="flex items-baseline gap-1.5 mt-1">
+            <span id="tel-count" class="font-mono text-3xl sm:text-4xl font-extrabold text-greenRally tracking-tight">0</span>
+            <span class="font-mono text-xs font-bold text-zinc-400">SPOTS</span>
+          </div>
+        </div>
+
+        <!-- GPS Accuracy -->
+        <div class="bg-panel border border-panelBorder rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">GPS Accuracy</span>
+          <div class="flex items-baseline gap-1.5 mt-1">
+            <span id="tel-acc" class="font-mono text-2xl sm:text-3xl font-extrabold text-white tracking-tight">--</span>
+            <span class="font-mono text-xs font-bold text-zinc-400">M</span>
+          </div>
+        </div>
+
+        <!-- Live Coordinates -->
+        <div class="bg-panel border border-panelBorder rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
+          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Coordinates</span>
+          <div id="tel-coords" class="font-mono text-xs sm:text-sm font-bold text-zinc-200 mt-1.5 leading-snug truncate">
+            Awaiting GPS lock
+          </div>
+        </div>
+      </div>
+
+      <!-- PRIMARY COCKPIT ACTION BAR (Large Touch Targets) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <button id="btn-main-toggle" onclick="toggleRun()" disabled
+          class="col-span-2 py-3.5 px-4 rounded-2xl bg-greenRally hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-extrabold text-sm sm:text-base tracking-wide flex items-center justify-center gap-2 transition shadow-lg">
+          <span id="btn-main-icon">▶</span>
+          <span id="btn-main-label">LOADING AI...</span>
+        </button>
+
+        <button id="btn-audio" onclick="toggleAudio()"
+          class="py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-amberRally/50 text-amberRally font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition">
+          <span id="audio-icon">🔊</span>
+          <span id="audio-label">CHIME: ON</span>
+        </button>
+
+        <button id="btn-wakelock" onclick="toggleWakeLock()"
+          class="py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-panelBorder text-zinc-300 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition">
+          <span id="wakelock-icon">☀️</span>
+          <span id="wakelock-label">SCREEN AWAKE</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- RIGHT / BOTTOM COLUMN: DETECTOR TUNING + SIGHTINGS LOG & EXPORT -->
+    <aside class="lg:col-span-4 flex flex-col gap-4">
+
+      <!-- DETECTOR CALIBRATION CARD -->
+      <div class="bg-panel border border-panelBorder rounded-2xl p-4 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-mono uppercase tracking-widest text-zinc-400 font-bold">Detector Calibration</h2>
+          <button onclick="manualTestCapture()" class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amberRally">
+            + Test Snap
+          </button>
+        </div>
+
+        <!-- Confidence Threshold Slider -->
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1.5">
+            <label for="slider-conf" class="font-semibold text-zinc-200">Confidence Threshold</label>
+            <span id="val-conf" class="font-mono font-extrabold text-amberRally text-sm">60%</span>
+          </div>
+          <input id="slider-conf" type="range" min="35" max="90" step="5" value="60" class="w-full"
+            oninput="updateConfidence(this.value)" />
+          <div class="flex justify-between text-[10px] font-mono text-zinc-500 mt-1">
+            <span>35% (Sensitive)</span>
+            <span>90% (Strict)</span>
+          </div>
+        </div>
+
+        <!-- Cooldown Timer Slider -->
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1.5">
+            <label for="slider-cool" class="font-semibold text-zinc-200">Duplicate Cooldown</label>
+            <span id="val-cool" class="font-mono font-extrabold text-amberRally text-sm">4.0s</span>
+          </div>
+          <input id="slider-cool" type="range" min="1" max="15" step="1" value="4" class="w-full"
+            oninput="updateCooldown(this.value)" />
+          <div class="flex justify-between text-[10px] font-mono text-zinc-500 mt-1">
+            <span>1s (Rapid)</span>
+            <span>15s (Single Pass)</span>
+          </div>
+        </div>
+
+        <!-- Optional Extra Rural Hazards Toggle -->
+        <div class="pt-2 border-t border-panelBorder flex items-center justify-between gap-2">
+          <div>
+            <p class="text-xs font-semibold text-zinc-200">Rural Hazards Mode</p>
+            <p class="text-[11px] text-zinc-400">Also flag cyclists, dogs, sheep &amp; cars</p>
+          </div>
+          <button id="btn-hazards" role="switch" aria-checked="false" onclick="toggleExtraHazards()"
+            class="w-12 h-7 rounded-full bg-zinc-800 border border-zinc-700 p-1 transition flex items-center">
+            <span id="hazards-knob" class="w-5 h-5 rounded-full bg-zinc-400 transition-transform"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SIGHTINGS LOG & OFFLINE EXPORT CARD -->
+      <div class="bg-panel border border-panelBorder rounded-2xl p-4 flex-1 flex flex-col min-h-[340px]">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 class="text-xs font-mono uppercase tracking-widest text-zinc-400 font-bold">Sightings Log</h2>
+            <p class="text-[11px] text-zinc-500">Stored locally in RAM until exported</p>
+          </div>
+          <button onclick="clearSightings()" class="text-xs font-semibold text-redRally hover:text-red-400 px-2.5 py-1.5 rounded-lg bg-redRally/10 border border-redRally/30">
+            Clear All
+          </button>
+        </div>
+
+        <!-- Export Action Buttons -->
+        <div class="grid grid-cols-3 gap-2 mb-3">
+          <button onclick="exportGPX()"
+            class="py-2.5 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amberRally font-mono font-bold text-xs text-center transition">
+            ↓ GPX
+          </button>
+          <button onclick="exportCSV()"
+            class="py-2.5 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-greenRally font-mono font-bold text-xs text-center transition">
+            ↓ CSV
+          </button>
+          <button onclick="exportHTMLReport()"
+            class="py-2.5 px-2 rounded-xl bg-amberRally hover:bg-amber-400 text-black font-mono font-extrabold text-xs text-center transition">
+            ↓ REPORT
+          </button>
+        </div>
+
+        <!-- Scrollable Sightings List -->
+        <div id="sightings-list" class="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[420px]">
+          <div id="empty-log-state" class="h-44 rounded-xl border border-dashed border-zinc-800 flex flex-col items-center justify-center text-center p-4">
+            <p class="text-xs font-semibold text-zinc-400">No roadside sightings logged yet</p>
+            <p class="text-[11px] text-zinc-500 mt-1">Start a run to automatically capture people with GPS tags.</p>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- Hidden Offscreen Canvas for Burning Bounding Boxes into Captured Thumbnails -->
+  <canvas id="capture-canvas" class="hidden"></canvas>
+
+  <script>
+    /**
+     * StageEye AI - Single-File Edge Vision & GPS Telemetry Prototype
+     * Runs 100% client-side in the browser using TensorFlow.js (COCO-SSD) + Geolocation API.
+     */
+
+    // --- Application State ---
+    const state = {
+      model: null,
+      isModelReady: false,
+      isRunning: false,
+      stream: null,
+      rafId: null,
+      gpsWatchId: null,
+      wakeLock: null,
+      wakeLockEnabled: true,
+      audioEnabled: true,
+      audioCtx: null,
+      confidenceThreshold: 0.60,
+      cooldownSeconds: 4,
+      lastCaptureTimestamp: 0,
+      includeExtraHazards: false, // false = 'person' only; true = also 'bicycle', 'dog', 'sheep', 'car'
+      sightings: [],
+      gps: {
+        lat: null,
+        lon: null,
+        speedMph: null,
+        accuracyM: null,
+        heading: null,
+        hasFix: false
+      },
+      perf: {
+        lastFrameTime: performance.now(),
+        fps: 0
+      }
+    };
+
+    // Allowed COCO-SSD object classes
+    const PERSON_ONLY_CLASSES = new Set(['person']);
+    const RURAL_HAZARD_CLASSES = new Set(['person', 'bicycle', 'dog', 'sheep', 'horse', 'cow', 'car', 'motorcycle']);
+
+    // --- DOM References ---
+    const videoEl = document.getElementById('camera-video');
+    const overlayCanvas = document.getElementById('overlay-canvas');
+    const overlayCtx = overlayCanvas.getContext('2d');
+    const captureCanvas = document.getElementById('capture-canvas');
+    const captureCtx = captureCanvas.getContext('2d');
+    const viewportShell = document.getElementById('viewport-shell');
+
+    // --- Initialisation on Page Load ---
+    window.addEventListener('DOMContentLoaded', async () => {
+      checkSecureContext();
+      startGPSWatcher();
+      await loadVisionModel();
+    });
+
+    /**
+     * Verify HTTPS or localhost (browsers block getUserMedia & Geolocation on plain HTTP)
+     */
+    function checkSecureContext() {
+      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (!window.isSecureContext && !isLocal) {
+        showBanner(
+          '<strong>HTTPS Required:</strong> Mobile browsers block camera and GPS access over plain HTTP or local file:// links. Host this file over <strong>HTTPS</strong> (e.g. GitHub Pages, Netlify, or localhost) to enable live rear camera and GPS lock.'
+        );
+      }
+    }
+
+    function showBanner(htmlMessage) {
+      const banner = document.getElementById('status-banner');
+      const textEl = document.getElementById('status-banner-text');
+      textEl.innerHTML = htmlMessage;
+      banner.classList.remove('hidden');
+    }
+
+    function hideBanner() {
+      document.getElementById('status-banner').classList.add('hidden');
+    }
+
+    /**
+     * Load COCO-SSD Lite MobileNetV2 model via TensorFlow.js
+     */
+    async function loadVisionModel() {
+      const badge = document.getElementById('badge-model');
+      try {
+        // Prefer WebGL backend for mobile GPU acceleration
+        await tf.ready();
+        state.model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+        state.isModelReady = true;
+
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-greenRally/40 text-greenRally';
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-greenRally"></span><span>AI: READY</span>';
+
+        enableStartButtons();
+      } catch (err) {
+        console.error('Model load error:', err);
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-redRally/50 text-redRally';
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-redRally"></span><span>AI: ERROR</span>';
+        showBanner(
+          '<strong>AI Model Failed to Load:</strong> Check your internet connection once so the browser can download and cache the TensorFlow.js vision model (~5 MB).'
+        );
+      }
+    }
+
+    function enableStartButtons() {
+      const btnOverlay = document.getElementById('btn-start-overlay');
+      const btnMain = document.getElementById('btn-main-toggle');
+      const btnMainLabel = document.getElementById('btn-main-label');
+
+      btnOverlay.disabled = false;
+      btnOverlay.textContent = 'START STAGE RUN';
+
+      btnMain.disabled = false;
+      btnMainLabel.textContent = 'START STAGE RUN';
+    }
+
+    /**
+     * Start / Stop Live Rear Camera & Detection Loop
+     */
+    async function toggleRun() {
+      if (!state.isModelReady) return;
+      if (state.isRunning) {
+        stopRun();
+      } else {
+        await startRun();
+      }
+    }
+
+    async function startRun() {
+      // Unlock Web Audio API on direct user tap
+      initAudioContext();
+
+      const camBadge = document.getElementById('badge-cam');
+      try {
+        // Request rear environment camera at 720p ideal
+        state.stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+
+        videoEl.srcObject = state.stream;
+        await videoEl.play();
+
+        // Sync overlay canvas resolution to actual camera stream dimensions
+        resizeOverlayCanvas();
+
+        state.isRunning = true;
+        document.getElementById('standby-overlay').classList.add('hidden');
+        videoEl.classList.remove('hidden');
+        document.getElementById('hud-overlay').classList.remove('hidden');
+
+        // Update Camera Status Pill
+        camBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-greenRally/40 text-greenRally';
+        camBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-greenRally animate-pulse"></span><span>CAM: LIVE</span>';
+
+        // Update Main Cockpit Button to STOP
+        const btnMain = document.getElementById('btn-main-toggle');
+        btnMain.className = 'col-span-2 py-3.5 px-4 rounded-2xl bg-redRally hover:bg-red-500 text-white font-extrabold text-sm sm:text-base tracking-wide flex items-center justify-center gap-2 transition shadow-lg';
+        document.getElementById('btn-main-icon').textContent = '■';
+        document.getElementById('btn-main-label').textContent = 'STOP STAGE RUN';
+
+        // Engage Screen Wake Lock so phone stays awake on windscreen
+        if (state.wakeLockEnabled) {
+          requestWakeLock();
+        }
+
+        // Kick off detection loop
+        state.perf.lastFrameTime = performance.now();
+        detectFrameLoop();
+      } catch (err) {
+        console.error('Camera error:', err);
+        camBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-redRally/50 text-redRally';
+        camBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-redRally"></span><span>CAM: BLOCKED</span>';
+        showBanner(
+          '<strong>Camera Access Denied or Unavailable:</strong> Please allow camera permissions in your browser settings and ensure no other dashcam app is holding the rear camera.'
+        );
+      }
+    }
+
+    function stopRun() {
+      state.isRunning = false;
+      if (state.rafId) {
+        cancelAnimationFrame(state.rafId);
+        state.rafId = null;
+      }
+      if (state.stream) {
+        state.stream.getTracks().forEach(track => track.stop());
+        state.stream = null;
+      }
+
+      videoEl.srcObject = null;
+      videoEl.classList.add('hidden');
+      document.getElementById('hud-overlay').classList.add('hidden');
+      document.getElementById('cooldown-pill').classList.add('hidden');
+      document.getElementById('standby-overlay').classList.remove('hidden');
+
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+      const camBadge = document.getElementById('badge-cam');
+      camBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-panelBorder text-zinc-400';
+      camBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-zinc-600"></span><span>CAM: STANDBY</span>';
+
+      const btnMain = document.getElementById('btn-main-toggle');
+      btnMain.className = 'col-span-2 py-3.5 px-4 rounded-2xl bg-greenRally hover:bg-emerald-400 text-black font-extrabold text-sm sm:text-base tracking-wide flex items-center justify-center gap-2 transition shadow-lg';
+      document.getElementById('btn-main-icon').textContent = '▶';
+      document.getElementById('btn-main-label').textContent = 'START STAGE RUN';
+
+      releaseWakeLock();
+    }
+
+    function resizeOverlayCanvas() {
+      if (videoEl.videoWidth && videoEl.videoHeight) {
+        overlayCanvas.width = videoEl.videoWidth;
+        overlayCanvas.height = videoEl.videoHeight;
+      }
+    }
+
+    window.addEventListener('resize', resizeOverlayCanvas);
+
+    /**
+     * Core Real-Time AI Inference & Bounding Box Render Loop
+     */
+    async function detectFrameLoop() {
+      if (!state.isRunning) return;
+
+      if (videoEl.readyState >= 2) {
+        if (overlayCanvas.width !== videoEl.videoWidth) {
+          resizeOverlayCanvas();
+        }
+
+        // Calculate live inference FPS
+        const now = performance.now();
+        const delta = now - state.perf.lastFrameTime;
+        state.perf.lastFrameTime = now;
+        if (delta > 0) {
+          state.perf.fps = (state.perf.fps * 0.8) + ((1000 / delta) * 0.2);
+          document.getElementById('hud-fps').textContent = state.perf.fps.toFixed(1);
+        }
+
+        // Run COCO-SSD object detection on current video frame
+        const predictions = await state.model.detect(videoEl, 10, 0.30);
+
+        // Filter predictions to allowed classes and above confidence threshold
+        const allowedClasses = state.includeExtraHazards ? RURAL_HAZARD_CLASSES : PERSON_ONLY_CLASSES;
+        const validMatches = predictions.filter(
+          pred => allowedClasses.has(pred.class) && pred.score >= state.confidenceThreshold
+        );
+
+        // Draw HUD boxes
+        drawDetectionsOnCanvas(overlayCtx, overlayCanvas.width, overlayCanvas.height, validMatches);
+
+        // Update Cooldown HUD Pill & Check if we should log a new sighting
+        const elapsedSinceLast = (Date.now() - state.lastCaptureTimestamp) / 1000;
+        const cooldownRemaining = Math.max(0, state.cooldownSeconds - elapsedSinceLast);
+        const cooldownPill = document.getElementById('cooldown-pill');
+
+        if (cooldownRemaining > 0 && state.lastCaptureTimestamp > 0) {
+          cooldownPill.classList.remove('hidden');
+          document.getElementById('cooldown-remaining').textContent = cooldownRemaining.toFixed(1);
+        } else {
+          cooldownPill.classList.add('hidden');
+        }
+
+        const hudStateText = document.getElementById('hud-state-text');
+        const liveDot = document.getElementById('live-rec-dot');
+
+        if (validMatches.length > 0) {
+          hudStateText.textContent = `ALERT: ${validMatches.length} TARGET${validMatches.length > 1 ? 'S' : ''} IN VIEW`;
+          hudStateText.className = 'font-mono text-xs font-extrabold tracking-wider text-redRally';
+          liveDot.className = 'w-2.5 h-2.5 rounded-full bg-redRally animate-ping';
+
+          if (cooldownRemaining <= 0) {
+            state.lastCaptureTimestamp = Date.now();
+            logSightingFromFrame(validMatches);
+          }
+        } else {
+          hudStateText.textContent = 'SCANNING ROAD AHEAD';
+          hudStateText.className = 'font-mono text-xs font-bold tracking-wider text-white';
+          liveDot.className = 'w-2.5 h-2.5 rounded-full bg-greenRally animate-pulse';
+        }
+      }
+
+      if (state.isRunning) {
+        state.rafId = requestAnimationFrame(detectFrameLoop);
+      }
+    }
+
+    /**
+     * Draw high-contrast motorsport bounding boxes + confidence tags onto a 2D context
+     */
+    function drawDetectionsOnCanvas(ctx, width, height, detections) {
+      ctx.clearRect(0, 0, width, height);
+
+      // Subtle centre road-corridor guide lines for windscreen alignment
+      ctx.save();
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.22)';
+      ctx.lineWidth = Math.max(2, width * 0.002);
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      ctx.moveTo(width * 0.22, height);
+      ctx.lineTo(width * 0.42, height * 0.52);
+      ctx.moveTo(width * 0.78, height);
+      ctx.lineTo(width * 0.58, height * 0.52);
+      ctx.stroke();
+      ctx.restore();
+
+      detections.forEach(det => {
+        const [x, y, w, h] = det.bbox;
+        const pct = Math.round(det.score * 100);
+        const labelText = `${det.class.toUpperCase()} ${pct}%`;
+        const boxColour = det.class === 'person' ? '#EF4444' : '#F59E0B';
+
+        // Outer bounding box
+        ctx.strokeStyle = boxColour;
+        ctx.lineWidth = Math.max(3, Math.round(width * 0.004));
+        ctx.strokeRect(x, y, w, h);
+
+        // Semi-transparent fill tint
+        ctx.fillStyle = det.class === 'person' ? 'rgba(239, 68, 68, 0.14)' : 'rgba(245, 158, 11, 0.14)';
+        ctx.fillRect(x, y, w, h);
+
+        // Label badge background
+        const fontSize = Math.max(14, Math.round(width * 0.018));
+        ctx.font = `800 ${fontSize}px "JetBrains Mono", monospace`;
+        const textMetrics = ctx.measureText(labelText);
+        const padX = 8;
+        const padY = 5;
+        const badgeW = textMetrics.width + padX * 2;
+        const badgeH = fontSize + padY * 2;
+        const badgeY = Math.max(0, y - badgeH);
+
+        ctx.fillStyle = boxColour;
+        ctx.fillRect(x, badgeY, badgeW, badgeH);
+
+        // Label text
+        ctx.fillStyle = '#000000';
+        ctx.fillText(labelText, x + padX, badgeY + fontSize + 1);
+      });
+    }
+
+    /**
+     * Capture compressed JPEG snapshot (with burned-in bounding boxes) + GPS telemetry
+     */
+    function logSightingFromFrame(detections, isManualTest = false) {
+      // Trigger visual flash + cockpit audio ping
+      viewportShell.classList.remove('flash-alert');
+      void viewportShell.offsetWidth; // trigger reflow
+      viewportShell.classList.add('flash-alert');
+      playCockpitChime();
+
+      // Create compressed 480px wide JPEG thumbnail
+      const targetW = 480;
+      const aspect = (videoEl.videoHeight && videoEl.videoWidth)
+        ? (videoEl.videoHeight / videoEl.videoWidth)
+        : (9 / 16);
+      const targetH = Math.round(targetW * aspect);
+
+      captureCanvas.width = targetW;
+      captureCanvas.height = targetH;
+
+      if (videoEl.readyState >= 2) {
+        captureCtx.drawImage(videoEl, 0, 0, targetW, targetH);
+        // Scale bounding boxes to thumbnail resolution
+        const scaleX = targetW / overlayCanvas.width;
+        const scaleY = targetH / overlayCanvas.height;
+        const scaledDetections = detections.map(d => ({
+          ...d,
+          bbox: [d.bbox[0] * scaleX, d.bbox[1] * scaleY, d.bbox[2] * scaleX, d.bbox[3] * scaleY]
+        }));
+        // Burn boxes directly onto thumbnail (without clearing the photo underneath)
+        burnBoxesOntoSnapshot(captureCtx, targetW, scaledDetections);
+      } else {
+        // Fallback dark test frame if user hits "+ Test Snap" while camera is off
+        captureCtx.fillStyle = '#11161D';
+        captureCtx.fillRect(0, 0, targetW, targetH);
+        captureCtx.fillStyle = '#F59E0B';
+        captureCtx.font = 'bold 16px monospace';
+        captureCtx.fillText('TEST TELEMETRY SNAPSHOT', 24, targetH / 2);
+      }
+
+      // Burn timestamp + speed watermark at bottom of thumbnail
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-GB', { hour12: false });
+      const speedLabel = state.gps.speedMph !== null ? `${state.gps.speedMph} MPH` : 'NO GPS SPD';
+      const coordLabel = state.gps.hasFix
+        ? `${state.gps.lat.toFixed(5)}, ${state.gps.lon.toFixed(5)}`
+        : 'NO GPS FIX';
+
+      captureCtx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+      captureCtx.fillRect(0, targetH - 24, targetW, 24);
+      captureCtx.fillStyle = '#F59E0B';
+      captureCtx.font = 'bold 11px monospace';
+      captureCtx.fillText(`${timeStr}  |  ${speedLabel}  |  ${coordLabel}`, 8, targetH - 8);
+
+      const dataUrl = captureCanvas.toDataURL('image/jpeg', 0.76);
+
+      // Highest confidence match in this frame
+      const topHit = detections.reduce((best, cur) => (cur.score > best.score ? cur : best), detections[0]);
+
+      const record = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        isoTime: now.toISOString(),
+        displayTime: timeStr,
+        label: isManualTest ? 'manual test' : topHit.class,
+        count: detections.length,
+        confidence: Math.round(topHit.score * 100),
+        lat: state.gps.lat,
+        lon: state.gps.lon,
+        speedMph: state.gps.speedMph,
+        accuracyM: state.gps.accuracyM,
+        thumbnail: dataUrl
+      };
+
+      state.sightings.unshift(record);
+      renderSightingsLog();
+    }
+
+    function burnBoxesOntoSnapshot(ctx, width, detections) {
+      detections.forEach(det => {
+        const [x, y, w, h] = det.bbox;
+        const pct = Math.round(det.score * 100);
+        const labelText = `${det.class.toUpperCase()} ${pct}%`;
+        const boxColour = det.class === 'person' ? '#EF4444' : '#F59E0B';
+
+        ctx.strokeStyle = boxColour;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(x, y, w, h);
+
+        ctx.font = 'bold 11px monospace';
+        const tw = ctx.measureText(labelText).width;
+        const by = Math.max(0, y - 16);
+        ctx.fillStyle = boxColour;
+        ctx.fillRect(x, by, tw + 8, 16);
+        ctx.fillStyle = '#000000';
+        ctx.fillText(labelText, x + 4, by + 12);
+      });
+    }
+
+    function manualTestCapture() {
+      logSightingFromFrame([{ class: 'person', score: 0.94, bbox: [160, 60, 120, 160] }], true);
+    }
+
+    /**
+     * Render Sightings Log Cards & Update Telemetry Counter
+     */
+    function renderSightingsLog() {
+      const listEl = document.getElementById('sightings-list');
+      const countEl = document.getElementById('tel-count');
+      countEl.textContent = state.sightings.length;
+
+      if (state.sightings.length === 0) {
+        listEl.innerHTML = `
+          <div id="empty-log-state" class="h-44 rounded-xl border border-dashed border-zinc-800 flex flex-col items-center justify-center text-center p-4">
+            <p class="text-xs font-semibold text-zinc-400">No roadside sightings logged yet</p>
+            <p class="text-[11px] text-zinc-500 mt-1">Start a run to automatically capture people with GPS tags.</p>
+          </div>`;
+        return;
+      }
+
+      listEl.innerHTML = state.sightings.map((item, idx) => {
+        const num = state.sightings.length - idx;
+        const speedStr = item.speedMph !== null ? `${item.speedMph} MPH` : '-- MPH';
+        const hasCoords = item.lat !== null && item.lon !== null;
+        const coordsStr = hasCoords ? `${item.lat.toFixed(5)}, ${item.lon.toFixed(5)}` : 'No GPS lock';
+        const mapLink = hasCoords
+          ? `<a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" rel="noopener" class="text-[11px] font-mono text-amberRally hover:underline">Map ↗</a>`
+          : '';
+
+        return `
+          <div class="bg-oled border border-panelBorder rounded-xl p-2.5 flex items-center gap-3">
+            <img src="${item.thumbnail}" alt="Sighting #${num}" class="w-24 h-16 object-cover rounded-lg border border-zinc-800 shrink-0" />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <span class="font-mono text-xs font-extrabold text-white uppercase">#${num} ${item.label} (${item.confidence}%)</span>
+                <span class="font-mono text-[11px] text-zinc-400">${item.displayTime}</span>
+              </div>
+              <div class="flex items-center gap-2 mt-1 font-mono text-xs">
+                <span class="text-greenRally font-bold">${speedStr}</span>
+                <span class="text-zinc-600">•</span>
+                <span class="text-zinc-300 truncate">${coordsStr}</span>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                ${mapLink || '<span></span>'}
+                <button onclick="deleteSighting(${item.id})" class="text-[11px] text-zinc-500 hover:text-redRally font-semibold">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function deleteSighting(id) {
+      state.sightings = state.sightings.filter(s => s.id !== id);
+      renderSightingsLog();
+    }
+
+    function clearSightings() {
+      if (state.sightings.length === 0) return;
+      state.sightings = [];
+      renderSightingsLog();
+    }
+
+    /**
+     * Live GPS Geolocation Watcher (UK MPH Conversion)
+     */
+    function startGPSWatcher() {
+      const gpsBadge = document.getElementById('badge-gps');
+      if (!('geolocation' in navigator)) {
+        gpsBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-redRally"></span><span>GPS: N/A</span>';
+        return;
+      }
+
+      state.gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, speed, accuracy, heading } = pos.coords;
+          state.gps.lat = latitude;
+          state.gps.lon = longitude;
+          state.gps.accuracyM = accuracy !== null ? Math.round(accuracy) : null;
+          state.gps.heading = heading;
+          state.gps.hasFix = true;
+
+          // Convert metres/second to UK Miles Per Hour (1 m/s = 2.23694 mph)
+          if (speed !== null && !Number.isNaN(speed)) {
+            state.gps.speedMph = Math.round(speed * 2.23694);
+          } else {
+            state.gps.speedMph = 0;
+          }
+
+          document.getElementById('tel-speed').textContent = state.gps.speedMph;
+          document.getElementById('tel-acc').textContent = state.gps.accuracyM !== null ? `±${state.gps.accuracyM}` : '--';
+          document.getElementById('tel-coords').textContent = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+
+          gpsBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-greenRally/40 text-greenRally';
+          gpsBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-greenRally"></span><span>GPS: ±${state.gps.accuracyM || '?'}M</span>`;
+        },
+        (err) => {
+          console.warn('GPS warning:', err.message);
+          gpsBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-amberRally/40 text-amberRally';
+          gpsBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amberRally"></span><span>GPS: NO FIX</span>';
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 10000
+        }
+      );
+    }
+
+    /**
+     * Screen Wake Lock API (Prevents windscreen mount auto-sleep)
+     */
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        state.wakeLock = await navigator.wakeLock.request('screen');
+        updateWakeLockUI(true);
+        state.wakeLock.addEventListener('release', () => {
+          updateWakeLockUI(false);
+        });
+      } catch (err) {
+        console.warn('Wake lock failed:', err);
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (state.wakeLock) {
+        await state.wakeLock.release();
+        state.wakeLock = null;
+      }
+      updateWakeLockUI(false);
+    }
+
+    function toggleWakeLock() {
+      state.wakeLockEnabled = !state.wakeLockEnabled;
+      if (state.wakeLockEnabled) {
+        requestWakeLock();
+      } else {
+        releaseWakeLock();
+      }
+    }
+
+    function updateWakeLockUI(active) {
+      const btn = document.getElementById('btn-wakelock');
+      const label = document.getElementById('wakelock-label');
+      if (active) {
+        btn.className = 'py-3.5 px-3 rounded-2xl bg-panel border border-greenRally/50 text-greenRally font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition';
+        label.textContent = 'AWAKE: LOCKED';
+      } else {
+        btn.className = 'py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-panelBorder text-zinc-300 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition';
+        label.textContent = state.wakeLockEnabled ? 'SCREEN AWAKE' : 'SLEEP NORMAL';
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && state.isRunning && state.wakeLockEnabled) {
+        requestWakeLock();
+      }
+    });
+
+    /**
+     * Web Audio API Subtle Cockpit Ping
+     */
+    function initAudioContext() {
+      if (!state.audioCtx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) state.audioCtx = new AudioCtx();
+      }
+      if (state.audioCtx && state.audioCtx.state === 'suspended') {
+        state.audioCtx.resume();
+      }
+    }
+
+    function toggleAudio() {
+      state.audioEnabled = !state.audioEnabled;
+      const btn = document.getElementById('btn-audio');
+      const icon = document.getElementById('audio-icon');
+      const label = document.getElementById('audio-label');
+
+      if (state.audioEnabled) {
+        initAudioContext();
+        playCockpitChime();
+        btn.className = 'py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-amberRally/50 text-amberRally font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition';
+        icon.textContent = '🔊';
+        label.textContent = 'CHIME: ON';
+      } else {
+        btn.className = 'py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-panelBorder text-zinc-400 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition';
+        icon.textContent = '🔇';
+        label.textContent = 'CHIME: OFF';
+      }
+    }
+
+    function playCockpitChime() {
+      if (!state.audioEnabled) return;
+      initAudioContext();
+      if (!state.audioCtx) return;
+
+      const now = state.audioCtx.currentTime;
+      const osc = state.audioCtx.createOscillator();
+      const gain = state.audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.09);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+      osc.connect(gain);
+      gain.connect(state.audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.19);
+    }
+
+    /**
+     * Calibration Controls
+     */
+    function updateConfidence(val) {
+      state.confidenceThreshold = Number(val) / 100;
+      document.getElementById('val-conf').textContent = `${val}%`;
+    }
+
+    function updateCooldown(val) {
+      state.cooldownSeconds = Number(val);
+      document.getElementById('val-cool').textContent = `${Number(val).toFixed(1)}s`;
+    }
+
+    function toggleExtraHazards() {
+      state.includeExtraHazards = !state.includeExtraHazards;
+      const btn = document.getElementById('btn-hazards');
+      const knob = document.getElementById('hazards-knob');
+      btn.setAttribute('aria-checked', String(state.includeExtraHazards));
+
+      if (state.includeExtraHazards) {
+        btn.className = 'w-12 h-7 rounded-full bg-amberRally/30 border border-amberRally p-1 transition flex items-center';
+        knob.className = 'w-5 h-5 rounded-full bg-amberRally translate-x-5 transition-transform';
+      } else {
+        btn.className = 'w-12 h-7 rounded-full bg-zinc-800 border border-zinc-700 p-1 transition flex items-center';
+        knob.className = 'w-5 h-5 rounded-full bg-zinc-400 translate-x-0 transition-transform';
+      }
+    }
+
+    /**
+     * OFFLINE EXPORTS: GPX Waypoints, CSV Log, and Self-Contained HTML Telemetry Report
+     */
+    function triggerDownload(filename, content, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    function getDateStamp() {
+      return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    }
+
+    function exportGPX() {
+      const validGpsItems = state.sightings.filter(s => s.lat !== null && s.lon !== null);
+      if (validGpsItems.length === 0) {
+        showBanner('<strong>No GPS Coordinates to Export:</strong> Ensure GPS lock is active while logging sightings before exporting a GPX file.');
+        return;
+      }
+
+      const waypointsXml = validGpsItems.slice().reverse().map((s, idx) => {
+        const speedText = s.speedMph !== null ? `${s.speedMph} MPH` : 'Unknown speed';
+        return `  <wpt lat="${s.lat.toFixed(6)}" lon="${s.lon.toFixed(6)}">
+    <time>${s.isoTime}</time>
+    <name>Spot #${idx + 1}: ${s.label.toUpperCase()} (${s.confidence}%)</name>
+    <desc>Detected ${s.label} (${s.confidence}% confidence) at ${speedText} on ${s.displayTime}</desc>
+    <sym>Flag, Red</sym>
+  </wpt>`;
+      }).join('\n');
+
+      const gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="StageEye AI" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>StageEye AI Roadside Sightings</name>
+    <time>${new Date().toISOString()}</time>
+  </metadata>
+${waypointsXml}
+</gpx>`;
+
+      triggerDownload(`stageeye-waypoints-${getDateStamp()}.gpx`, gpxContent, 'application/gpx+xml');
+    }
+
+    function exportCSV() {
+      if (state.sightings.length === 0) {
+        showBanner('<strong>Log Empty:</strong> Capture at least one sighting before exporting CSV telemetry.');
+        return;
+      }
+
+      const headers = ['Sighting_No', 'ISO_Timestamp', 'Local_Time', 'Object_Class', 'Confidence_Pct', 'Speed_MPH', 'Latitude', 'Longitude', 'Accuracy_Metres', 'Google_Maps_URL'];
+      const rows = state.sightings.slice().reverse().map((s, idx) => {
+        const mapsUrl = (s.lat !== null && s.lon !== null) ? `https://www.google.com/maps?q=${s.lat},${s.lon}` : '';
+        return [
+          idx + 1,
+          s.isoTime,
+          s.displayTime,
+          s.label,
+          s.confidence,
+          s.speedMph ?? '',
+          s.lat ?? '',
+          s.lon ?? '',
+          s.accuracyM ?? '',
+          mapsUrl
+        ].join(',');
+      });
+
+      const csvContent = [headers.join(','), ...rows].join('\n');
+      triggerDownload(`stageeye-log-${getDateStamp()}.csv`, csvContent, 'text/csv;charset=utf-8;');
+    }
+
+    function exportHTMLReport() {
+      if (state.sightings.length === 0) {
+        showBanner('<strong>Log Empty:</strong> Capture at least one sighting before exporting an HTML visual report.');
+        return;
+      }
+
+      const cardsHtml = state.sightings.slice().reverse().map((s, idx) => {
+        const hasCoords = s.lat !== null && s.lon !== null;
+        const coordText = hasCoords ? `${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}` : 'No GPS Fix';
+        const mapBtn = hasCoords
+          ? `<a href="https://www.google.com/maps?q=${s.lat},${s.lon}" target="_blank" style="display:inline-block;margin-top:8px;padding:6px 12px;background:#F59E0B;color:#000;font-weight:700;text-decoration:none;border-radius:6px;font-size:12px;">Open in Google Maps ↗</a>`
+          : '';
+
+        return `
+          <div style="background:#0B0D10;border:1px solid #1E242D;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;">
+            <img src="${s.thumbnail}" alt="Sighting ${idx + 1}" style="width:100%;height:auto;display:block;border-bottom:1px solid #1E242D;" />
+            <div style="padding:14px;">
+              <div style="font-family:monospace;font-size:14px;font-weight:800;color:#EF4444;">#${idx + 1} — ${s.label.toUpperCase()} (${s.confidence}%)</div>
+              <div style="font-family:monospace;font-size:12px;color:#A1A1AA;margin-top:4px;">Time: ${s.displayTime} | Speed: ${s.speedMph ?? '--'} MPH</div>
+              <div style="font-family:monospace;font-size:12px;color:#E4E4E7;margin-top:4px;">GPS: ${coordText}</div>
+              ${mapBtn}
+            </div>
+          </div>`;
+      }).join('\n');
+
+      const reportHtml = `<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StageEye AI — Post-Run Sightings Report</title>
+</head>
+<body style="background:#000;color:#F4F4F5;font-family:system-ui,-apple-system,sans-serif;margin:0;padding:24px;">
+  <div style="max-width:1000px;margin:0 auto;">
+    <h1 style="margin:0 0 6px;font-size:24px;">STAGE<span style="color:#F59E0B;">EYE</span> AI — Post-Run Sightings Report</h1>
+    <p style="margin:0 0 24px;color:#A1A1AA;font-size:14px;">Generated ${new Date().toLocaleString('en-GB')} • Total Logged Sightings: ${state.sightings.length}</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;">
+      ${cardsHtml}
+    </div>
+  </div>
+</body>
+</html>`;
+
+      triggerDownload(`stageeye-report-${getDateStamp()}.html`, reportHtml, 'text/html;charset=utf-8;');
+    }
+  </script>
+</body>
+</html>
