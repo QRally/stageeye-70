@@ -4,9 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>StageEye AI — Roadside Vision &amp; GPS Telemetry</title>
+  <meta name="description" content="On-device roadside person detection and GPS telemetry cockpit for rally and stage runs." />
+  <meta property="og:title" content="StageEye AI" />
+  <meta property="og:description" content="On-device roadside person detection and GPS telemetry cockpit for rally and stage runs." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
 
   <!-- Tailwind CSS for responsive OLED cockpit UI -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -99,7 +105,6 @@
       <!-- Brand / Stage Title -->
       <div class="flex items-center gap-2.5">
         <div class="w-9 h-9 rounded-xl bg-amberRally/15 border border-amberRally/40 flex items-center justify-center text-amberRally">
-          <!-- Rally Crosshair / Vision SVG Icon -->
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             <path d="M3 7V5a2 2 0 0 1 2-2h2" />
             <path d="M17 3h2a2 2 0 0 1 2 2v2" />
@@ -112,13 +117,13 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white">STAGE<span class="text-amberRally">EYE</span> AI</h1>
-            <span class="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">EDGE v1.0</span>
+            <span class="text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">EDGE v1.1</span>
           </div>
           <p class="text-[11px] text-zinc-400 hidden sm:block">On-Device Roadside Person Detection &amp; GPS Telemetry</p>
         </div>
       </div>
 
-      <!-- Live System Health Pills (Model / Camera / GPS) -->
+      <!-- Live System Health Indicators (Model / Camera / GPS) -->
       <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-mono">
         <span id="badge-model" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-amberRally/40 text-amberRally">
           <span class="w-2 h-2 rounded-full bg-amberRally animate-pulse"></span>
@@ -145,7 +150,7 @@
         </svg>
         <div id="status-banner-text" class="leading-relaxed"></div>
       </div>
-      <button onclick="hideBanner()" class="text-amberRally hover:text-white font-bold px-2 py-1 rounded-lg">✕</button>
+      <button type="button" onclick="hideBanner()" aria-label="Dismiss warning" class="text-amberRally hover:text-white font-bold px-2 py-1 rounded-lg">✕</button>
     </div>
   </div>
 
@@ -160,24 +165,33 @@
         <!-- Rear Camera Video Element -->
         <video id="camera-video" class="w-full h-full object-cover hidden" playsinline muted autoplay></video>
 
-        <!-- Transparent AI Bounding Box Overlay Canvas -->
-        <canvas id="overlay-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+        <!-- Transparent AI Bounding Box Overlay Canvas (object-cover synced to video) -->
+        <canvas id="overlay-canvas" class="absolute inset-0 w-full h-full object-cover pointer-events-none"></canvas>
 
-        <!-- Top-Left HUD Overlay inside Camera -->
-        <div id="hud-overlay" class="hidden absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+        <!-- Top HUD Overlay inside Camera -->
+        <div id="hud-overlay" class="hidden absolute top-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
           <div class="flex items-center gap-2 bg-black/75 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl">
             <span id="live-rec-dot" class="w-2.5 h-2.5 rounded-full bg-greenRally animate-pulse"></span>
             <span id="hud-state-text" class="font-mono text-xs font-bold tracking-wider text-white">SCANNING ROAD AHEAD</span>
           </div>
-          <div class="bg-black/75 backdrop-blur-md border border-white/15 px-2.5 py-1.5 rounded-xl font-mono text-xs text-zinc-300">
-            <span id="hud-fps">0.0</span> FPS
+          <div class="flex items-center gap-2">
+            <div class="bg-black/75 backdrop-blur-md border border-white/15 px-2.5 py-1.5 rounded-xl font-mono text-xs text-amberRally font-bold">
+              <span id="hud-timer">00:00</span>
+            </div>
+            <div class="bg-black/75 backdrop-blur-md border border-white/15 px-2.5 py-1.5 rounded-xl font-mono text-xs text-zinc-300">
+              <span id="hud-fps">0.0</span> FPS
+            </div>
           </div>
         </div>
 
-        <!-- Bottom-Left Cooldown Indicator inside Camera -->
-        <div id="cooldown-pill" class="hidden absolute bottom-3 left-3 bg-amberRally/90 text-black font-mono text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-lg">
+        <!-- Bottom Cooldown + Torch Controls inside Camera -->
+        <div id="cooldown-pill" class="hidden absolute bottom-3 left-3 bg-amberRally/90 text-black font-mono text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-lg pointer-events-none">
           COOLDOWN: <span id="cooldown-remaining">0.0</span>s
         </div>
+
+        <button id="btn-torch" type="button" onclick="toggleTorch()" class="hidden absolute bottom-3 right-3 bg-black/80 hover:bg-zinc-900 border border-white/20 text-zinc-200 font-mono text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg transition">
+          🔦 TORCH: OFF
+        </button>
 
         <!-- Standby Launch Overlay (Shown before Start Run is tapped) -->
         <div id="standby-overlay" class="p-6 text-center max-w-md flex flex-col items-center gap-4">
@@ -192,7 +206,7 @@
               Uses your rear camera, browser AI, and GPS locally on this device. No video is uploaded to the cloud.
             </p>
           </div>
-          <button id="btn-start-overlay" onclick="toggleRun()" disabled
+          <button id="btn-start-overlay" type="button" onclick="toggleRun()" disabled
             class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-amberRally hover:bg-amber-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-extrabold text-sm sm:text-base tracking-wide transition shadow-lg">
             LOADING AI MODEL...
           </button>
@@ -201,18 +215,25 @@
 
       <!-- HIGH-CONTRAST TELEMETRY READOUT STRIP -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <!-- Live Speed (MPH) -->
-        <div class="bg-panel border border-panelBorder rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
-          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Speed</span>
+        <!-- Live Speed (Tap to toggle MPH / KM/H) -->
+        <button type="button" onclick="toggleSpeedUnit()" title="Tap to switch MPH / KM/H"
+          class="text-left bg-panel hover:bg-zinc-900/90 border border-panelBorder rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between transition">
+          <div class="flex items-center justify-between w-full">
+            <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Speed</span>
+            <span class="text-[10px] font-mono text-zinc-500">TAP UNIT</span>
+          </div>
           <div class="flex items-baseline gap-1.5 mt-1">
             <span id="tel-speed" class="font-mono text-3xl sm:text-4xl font-extrabold text-white tracking-tight">--</span>
-            <span class="font-mono text-xs font-bold text-amberRally">MPH</span>
+            <span id="tel-speed-unit" class="font-mono text-xs font-bold text-amberRally">MPH</span>
           </div>
-        </div>
+        </button>
 
-        <!-- Sightings Counter -->
+        <!-- Sightings Counter & Stage Distance -->
         <div class="bg-panel border border-panelBorder rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between">
-          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Logged Hits</span>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Logged Hits</span>
+            <span id="tel-dist" class="font-mono text-[10px] font-bold text-zinc-400">0.00 MI</span>
+          </div>
           <div class="flex items-baseline gap-1.5 mt-1">
             <span id="tel-count" class="font-mono text-3xl sm:text-4xl font-extrabold text-greenRally tracking-tight">0</span>
             <span class="font-mono text-xs font-bold text-zinc-400">SPOTS</span>
@@ -239,19 +260,19 @@
 
       <!-- PRIMARY COCKPIT ACTION BAR (Large Touch Targets) -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <button id="btn-main-toggle" onclick="toggleRun()" disabled
+        <button id="btn-main-toggle" type="button" onclick="toggleRun()" disabled
           class="col-span-2 py-3.5 px-4 rounded-2xl bg-greenRally hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-extrabold text-sm sm:text-base tracking-wide flex items-center justify-center gap-2 transition shadow-lg">
           <span id="btn-main-icon">▶</span>
           <span id="btn-main-label">LOADING AI...</span>
         </button>
 
-        <button id="btn-audio" onclick="toggleAudio()"
+        <button id="btn-audio" type="button" onclick="toggleAudio()"
           class="py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-amberRally/50 text-amberRally font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition">
           <span id="audio-icon">🔊</span>
           <span id="audio-label">CHIME: ON</span>
         </button>
 
-        <button id="btn-wakelock" onclick="toggleWakeLock()"
+        <button id="btn-wakelock" type="button" onclick="toggleWakeLock()"
           class="py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-panelBorder text-zinc-300 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition">
           <span id="wakelock-icon">☀️</span>
           <span id="wakelock-label">SCREEN AWAKE</span>
@@ -266,7 +287,7 @@
       <div class="bg-panel border border-panelBorder rounded-2xl p-4 flex flex-col gap-4">
         <div class="flex items-center justify-between">
           <h2 class="text-xs font-mono uppercase tracking-widest text-zinc-400 font-bold">Detector Calibration</h2>
-          <button onclick="manualTestCapture()" class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amberRally">
+          <button type="button" onclick="manualTestCapture()" class="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amberRally transition">
             + Test Snap
           </button>
         </div>
@@ -305,7 +326,7 @@
             <p class="text-xs font-semibold text-zinc-200">Rural Hazards Mode</p>
             <p class="text-[11px] text-zinc-400">Also flag cyclists, dogs, sheep &amp; cars</p>
           </div>
-          <button id="btn-hazards" role="switch" aria-checked="false" onclick="toggleExtraHazards()"
+          <button id="btn-hazards" type="button" role="switch" aria-checked="false" onclick="toggleExtraHazards()"
             class="w-12 h-7 rounded-full bg-zinc-800 border border-zinc-700 p-1 transition flex items-center">
             <span id="hazards-knob" class="w-5 h-5 rounded-full bg-zinc-400 transition-transform"></span>
           </button>
@@ -317,24 +338,25 @@
         <div class="flex items-center justify-between gap-2 mb-3">
           <div>
             <h2 class="text-xs font-mono uppercase tracking-widest text-zinc-400 font-bold">Sightings Log</h2>
-            <p class="text-[11px] text-zinc-500">Stored locally in RAM until exported</p>
+            <p class="text-[11px] text-zinc-500">Saved locally on this device</p>
           </div>
-          <button onclick="clearSightings()" class="text-xs font-semibold text-redRally hover:text-red-400 px-2.5 py-1.5 rounded-lg bg-redRally/10 border border-redRally/30">
+          <button id="btn-clear-all" type="button" onclick="handleClearSightingsClick()"
+            class="text-xs font-semibold text-redRally hover:text-red-400 px-2.5 py-1.5 rounded-lg bg-redRally/10 border border-redRally/30 transition">
             Clear All
           </button>
         </div>
 
         <!-- Export Action Buttons -->
         <div class="grid grid-cols-3 gap-2 mb-3">
-          <button onclick="exportGPX()"
+          <button type="button" onclick="exportGPX()"
             class="py-2.5 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amberRally font-mono font-bold text-xs text-center transition">
             ↓ GPX
           </button>
-          <button onclick="exportCSV()"
+          <button type="button" onclick="exportCSV()"
             class="py-2.5 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-greenRally font-mono font-bold text-xs text-center transition">
             ↓ CSV
           </button>
-          <button onclick="exportHTMLReport()"
+          <button type="button" onclick="exportHTMLReport()"
             class="py-2.5 px-2 rounded-xl bg-amberRally hover:bg-amber-400 text-black font-mono font-extrabold text-xs text-center transition">
             ↓ REPORT
           </button>
@@ -352,20 +374,55 @@
     </aside>
   </main>
 
+  <!-- SIGHTING LIGHTBOX MODAL -->
+  <div id="sighting-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-sm p-4 flex items-center justify-center" onclick="if (event.target === this) closeSightingModal()">
+    <div class="bg-panel border border-panelBorder rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-panelBorder">
+        <span id="modal-title" class="font-mono text-xs sm:text-sm font-extrabold text-white uppercase"></span>
+        <button type="button" onclick="closeSightingModal()" class="text-zinc-400 hover:text-white font-bold px-2 py-1 rounded-lg">✕</button>
+      </div>
+      <img id="modal-img" src="" alt="Sighting snapshot" class="w-full h-auto bg-black block" />
+      <div class="p-4 space-y-3">
+        <div id="modal-meta" class="font-mono text-xs text-zinc-300 space-y-1"></div>
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <a id="modal-map-link" href="#" target="_blank" rel="noopener noreferrer"
+            class="hidden px-3.5 py-2 rounded-xl bg-amberRally hover:bg-amber-400 text-black font-mono font-extrabold text-xs transition">
+            Open in Google Maps ↗
+          </a>
+          <button id="modal-delete-btn" type="button"
+            class="ml-auto px-3.5 py-2 rounded-xl bg-redRally/15 hover:bg-redRally/25 border border-redRally/40 text-redRally font-semibold text-xs transition">
+            Delete Sighting
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Hidden Offscreen Canvas for Burning Bounding Boxes into Captured Thumbnails -->
   <canvas id="capture-canvas" class="hidden"></canvas>
 
   <script>
     /**
-     * StageEye AI - Single-File Edge Vision & GPS Telemetry Prototype
-     * Runs 100% client-side in the browser using TensorFlow.js (COCO-SSD) + Geolocation API.
+     * StageEye AI (EDGE v1.1) — Single-File Edge Vision & GPS Telemetry
+     * Runs 100% client-side using TensorFlow.js (COCO-SSD) + Geolocation API.
      */
+
+    const STORAGE_KEYS = {
+      settings: 'stageeye_settings_v1',
+      sightings: 'stageeye_sightings_v1'
+    };
+    const MAX_STORED_SIGHTINGS = 120;
+    const MAX_CONSECUTIVE_DETECT_ERRORS = 5;
 
     // --- Application State ---
     const state = {
       model: null,
       isModelReady: false,
       isRunning: false,
+      runId: 0,
+      runStartTime: 0,
+      timerIntervalId: null,
+      consecutiveDetectErrors: 0,
       stream: null,
       rafId: null,
       gpsWatchId: null,
@@ -373,18 +430,26 @@
       wakeLockEnabled: true,
       audioEnabled: true,
       audioCtx: null,
+      torchSupported: false,
+      torchEnabled: false,
       confidenceThreshold: 0.60,
       cooldownSeconds: 4,
       lastCaptureTimestamp: 0,
-      includeExtraHazards: false, // false = 'person' only; true = also 'bicycle', 'dog', 'sheep', 'car'
+      includeExtraHazards: false,
+      speedUnit: 'MPH', // 'MPH' or 'KMH'
+      clearConfirmTimer: null,
+      nextSightingId: 1,
       sightings: [],
       gps: {
         lat: null,
         lon: null,
-        speedMph: null,
+        speedMps: null,
         accuracyM: null,
         heading: null,
-        hasFix: false
+        hasFix: false,
+        lastTrackLat: null,
+        lastTrackLon: null,
+        stageDistanceMeters: 0
       },
       perf: {
         lastFrameTime: performance.now(),
@@ -406,10 +471,136 @@
 
     // --- Initialisation on Page Load ---
     window.addEventListener('DOMContentLoaded', async () => {
+      loadPersistedSettings();
+      loadPersistedSightings();
       checkSecureContext();
       startGPSWatcher();
+      videoEl.addEventListener('loadedmetadata', resizeOverlayCanvas);
+      videoEl.addEventListener('resize', resizeOverlayCanvas);
+      window.addEventListener('resize', resizeOverlayCanvas);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSightingModal();
+      });
       await loadVisionModel();
     });
+
+    /**
+     * Escaping Helpers (Safe HTML / XML / CSV generation)
+     */
+    function escapeHtml(str) {
+      return String(str ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[ch]);
+    }
+
+    function escapeXml(str) {
+      return String(str ?? '').replace(/[<>&'"]/g, (ch) => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;',
+        "'": '&apos;',
+        '"': '&quot;'
+      })[ch]);
+    }
+
+    function escapeCsv(val) {
+      const str = String(val ?? '');
+      if (/[",\n\r]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    }
+
+    /**
+     * LocalStorage Persistence (Calibration & Sightings)
+     */
+    function saveSettings() {
+      try {
+        localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify({
+          confidenceThreshold: state.confidenceThreshold,
+          cooldownSeconds: state.cooldownSeconds,
+          includeExtraHazards: state.includeExtraHazards,
+          audioEnabled: state.audioEnabled,
+          wakeLockEnabled: state.wakeLockEnabled,
+          speedUnit: state.speedUnit
+        }));
+      } catch (err) {
+        console.warn('Settings save skipped:', err);
+      }
+    }
+
+    function loadPersistedSettings() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.settings);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+
+        if (typeof saved.confidenceThreshold === 'number') {
+          const pct = Math.min(90, Math.max(35, Math.round(saved.confidenceThreshold * 100)));
+          state.confidenceThreshold = pct / 100;
+          document.getElementById('slider-conf').value = String(pct);
+          document.getElementById('val-conf').textContent = `${pct}%`;
+        }
+        if (typeof saved.cooldownSeconds === 'number') {
+          const sec = Math.min(15, Math.max(1, Math.round(saved.cooldownSeconds)));
+          state.cooldownSeconds = sec;
+          document.getElementById('slider-cool').value = String(sec);
+          document.getElementById('val-cool').textContent = `${sec.toFixed(1)}s`;
+        }
+        if (typeof saved.includeExtraHazards === 'boolean') {
+          state.includeExtraHazards = saved.includeExtraHazards;
+          syncHazardsUI();
+        }
+        if (typeof saved.audioEnabled === 'boolean') {
+          state.audioEnabled = saved.audioEnabled;
+          syncAudioUI();
+        }
+        if (typeof saved.wakeLockEnabled === 'boolean') {
+          state.wakeLockEnabled = saved.wakeLockEnabled;
+          updateWakeLockUI(false);
+        }
+        if (saved.speedUnit === 'MPH' || saved.speedUnit === 'KMH') {
+          state.speedUnit = saved.speedUnit;
+          syncSpeedUI();
+        }
+      } catch (err) {
+        console.warn('Settings restore failed:', err);
+      }
+    }
+
+    function saveSightings() {
+      try {
+        const capped = state.sightings.slice(0, MAX_STORED_SIGHTINGS);
+        localStorage.setItem(STORAGE_KEYS.sightings, JSON.stringify(capped));
+      } catch (err) {
+        try {
+          const trimmed = state.sightings.slice(0, Math.max(10, Math.floor(state.sightings.length / 2)));
+          localStorage.setItem(STORAGE_KEYS.sightings, JSON.stringify(trimmed));
+        } catch (_) {
+          console.warn('LocalStorage quota reached; keeping latest sightings in RAM.');
+        }
+      }
+    }
+
+    function loadPersistedSightings() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.sightings);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          state.sightings = parsed;
+          const maxId = parsed.reduce((max, item) => (typeof item.id === 'number' && item.id > max ? item.id : max), 0);
+          state.nextSightingId = maxId + 1;
+          renderSightingsLog();
+        }
+      } catch (err) {
+        console.warn('Sightings restore failed:', err);
+      }
+    }
 
     /**
      * Verify HTTPS or localhost (browsers block getUserMedia & Geolocation on plain HTTP)
@@ -440,7 +631,6 @@
     async function loadVisionModel() {
       const badge = document.getElementById('badge-model');
       try {
-        // Prefer WebGL backend for mobile GPU acceleration
         await tf.ready();
         state.model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
         state.isModelReady = true;
@@ -484,12 +674,19 @@
     }
 
     async function startRun() {
-      // Unlock Web Audio API on direct user tap
       initAudioContext();
 
       const camBadge = document.getElementById('badge-cam');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        camBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-redRally/50 text-redRally';
+        camBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-redRally"></span><span>CAM: BLOCKED</span>';
+        showBanner(
+          '<strong>Camera API Unavailable:</strong> Rear camera access requires <strong>HTTPS</strong> (or localhost) and a modern mobile browser.'
+        );
+        return;
+      }
+
       try {
-        // Request rear environment camera at 720p ideal
         state.stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
           video: {
@@ -500,36 +697,47 @@
         });
 
         videoEl.srcObject = state.stream;
+        videoEl.classList.remove('hidden');
         await videoEl.play();
-
-        // Sync overlay canvas resolution to actual camera stream dimensions
         resizeOverlayCanvas();
 
         state.isRunning = true;
+        state.runId += 1;
+        state.consecutiveDetectErrors = 0;
+        state.runStartTime = Date.now();
+        state.gps.stageDistanceMeters = 0;
+        state.gps.lastTrackLat = state.gps.lat;
+        state.gps.lastTrackLon = state.gps.lon;
+        syncDistanceUI();
+        startRunTimer();
+
         document.getElementById('standby-overlay').classList.add('hidden');
-        videoEl.classList.remove('hidden');
         document.getElementById('hud-overlay').classList.remove('hidden');
 
-        // Update Camera Status Pill
+        setupTorchCapability();
+
         camBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-greenRally/40 text-greenRally';
         camBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-greenRally animate-pulse"></span><span>CAM: LIVE</span>';
 
-        // Update Main Cockpit Button to STOP
         const btnMain = document.getElementById('btn-main-toggle');
         btnMain.className = 'col-span-2 py-3.5 px-4 rounded-2xl bg-redRally hover:bg-red-500 text-white font-extrabold text-sm sm:text-base tracking-wide flex items-center justify-center gap-2 transition shadow-lg';
         document.getElementById('btn-main-icon').textContent = '■';
         document.getElementById('btn-main-label').textContent = 'STOP STAGE RUN';
 
-        // Engage Screen Wake Lock so phone stays awake on windscreen
         if (state.wakeLockEnabled) {
           requestWakeLock();
         }
 
-        // Kick off detection loop
         state.perf.lastFrameTime = performance.now();
-        detectFrameLoop();
+        detectFrameLoop(state.runId);
       } catch (err) {
         console.error('Camera error:', err);
+        if (state.stream) {
+          state.stream.getTracks().forEach(t => t.stop());
+          state.stream = null;
+        }
+        videoEl.srcObject = null;
+        videoEl.classList.add('hidden');
         camBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-redRally/50 text-redRally';
         camBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-redRally"></span><span>CAM: BLOCKED</span>';
         showBanner(
@@ -540,15 +748,24 @@
 
     function stopRun() {
       state.isRunning = false;
+      state.runId += 1;
+      stopRunTimer();
+
       if (state.rafId) {
         cancelAnimationFrame(state.rafId);
         state.rafId = null;
       }
+
       if (state.stream) {
         state.stream.getTracks().forEach(track => track.stop());
         state.stream = null;
       }
 
+      state.torchSupported = false;
+      state.torchEnabled = false;
+      document.getElementById('btn-torch').classList.add('hidden');
+
+      videoEl.pause();
       videoEl.srcObject = null;
       videoEl.classList.add('hidden');
       document.getElementById('hud-overlay').classList.add('hidden');
@@ -569,27 +786,87 @@
       releaseWakeLock();
     }
 
+    function startRunTimer() {
+      stopRunTimer();
+      updateRunTimerDisplay();
+      state.timerIntervalId = setInterval(updateRunTimerDisplay, 1000);
+    }
+
+    function stopRunTimer() {
+      if (state.timerIntervalId) {
+        clearInterval(state.timerIntervalId);
+        state.timerIntervalId = null;
+      }
+    }
+
+    function updateRunTimerDisplay() {
+      const elapsedSec = Math.max(0, Math.floor((Date.now() - state.runStartTime) / 1000));
+      const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+      const secs = String(elapsedSec % 60).padStart(2, '0');
+      document.getElementById('hud-timer').textContent = `${mins}:${secs}`;
+    }
+
     function resizeOverlayCanvas() {
-      if (videoEl.videoWidth && videoEl.videoHeight) {
+      if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
         overlayCanvas.width = videoEl.videoWidth;
         overlayCanvas.height = videoEl.videoHeight;
       }
     }
 
-    window.addEventListener('resize', resizeOverlayCanvas);
+    /**
+     * Torch / Flashlight Support for Dusk & Forest Stages
+     */
+    function setupTorchCapability() {
+      const btnTorch = document.getElementById('btn-torch');
+      state.torchSupported = false;
+      state.torchEnabled = false;
+      btnTorch.classList.add('hidden');
+
+      const track = state.stream?.getVideoTracks()?.[0];
+      if (!track || typeof track.getCapabilities !== 'function') return;
+      try {
+        const caps = track.getCapabilities();
+        if (caps && caps.torch) {
+          state.torchSupported = true;
+          btnTorch.textContent = '🔦 TORCH: OFF';
+          btnTorch.className = 'absolute bottom-3 right-3 bg-black/80 hover:bg-zinc-900 border border-white/20 text-zinc-200 font-mono text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg transition';
+          btnTorch.classList.remove('hidden');
+        }
+      } catch (_) {}
+    }
+
+    async function toggleTorch() {
+      if (!state.torchSupported || !state.stream) return;
+      const track = state.stream.getVideoTracks()[0];
+      if (!track) return;
+      const nextState = !state.torchEnabled;
+      try {
+        await track.applyConstraints({ advanced: [{ torch: nextState }] });
+        state.torchEnabled = nextState;
+        const btnTorch = document.getElementById('btn-torch');
+        if (nextState) {
+          btnTorch.textContent = '🔦 TORCH: ON';
+          btnTorch.className = 'absolute bottom-3 right-3 bg-amberRally text-black border border-amberRally font-mono text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-lg transition';
+        } else {
+          btnTorch.textContent = '🔦 TORCH: OFF';
+          btnTorch.className = 'absolute bottom-3 right-3 bg-black/80 hover:bg-zinc-900 border border-white/20 text-zinc-200 font-mono text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg transition';
+        }
+      } catch (err) {
+        console.warn('Torch toggle failed:', err);
+      }
+    }
 
     /**
      * Core Real-Time AI Inference & Bounding Box Render Loop
      */
-    async function detectFrameLoop() {
-      if (!state.isRunning) return;
+    async function detectFrameLoop(runId) {
+      if (!state.isRunning || runId !== state.runId) return;
 
-      if (videoEl.readyState >= 2) {
-        if (overlayCanvas.width !== videoEl.videoWidth) {
+      if (videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+        if (overlayCanvas.width !== videoEl.videoWidth || overlayCanvas.height !== videoEl.videoHeight) {
           resizeOverlayCanvas();
         }
 
-        // Calculate live inference FPS
         const now = performance.now();
         const delta = now - state.perf.lastFrameTime;
         state.perf.lastFrameTime = now;
@@ -598,19 +875,29 @@
           document.getElementById('hud-fps').textContent = state.perf.fps.toFixed(1);
         }
 
-        // Run COCO-SSD object detection on current video frame
-        const predictions = await state.model.detect(videoEl, 10, 0.30);
+        let predictions = [];
+        try {
+          predictions = await state.model.detect(videoEl, 10, 0.30);
+          state.consecutiveDetectErrors = 0;
+        } catch (err) {
+          state.consecutiveDetectErrors += 1;
+          console.warn('Frame detection warning:', err);
+          if (state.consecutiveDetectErrors >= MAX_CONSECUTIVE_DETECT_ERRORS) {
+            showBanner('<strong>Vision Loop Interrupted:</strong> Camera frame inference failed repeatedly. Tap Start Stage Run to reinitialise.');
+            stopRun();
+            return;
+          }
+        }
 
-        // Filter predictions to allowed classes and above confidence threshold
+        if (!state.isRunning || runId !== state.runId) return;
+
         const allowedClasses = state.includeExtraHazards ? RURAL_HAZARD_CLASSES : PERSON_ONLY_CLASSES;
         const validMatches = predictions.filter(
           pred => allowedClasses.has(pred.class) && pred.score >= state.confidenceThreshold
         );
 
-        // Draw HUD boxes
         drawDetectionsOnCanvas(overlayCtx, overlayCanvas.width, overlayCanvas.height, validMatches);
 
-        // Update Cooldown HUD Pill & Check if we should log a new sighting
         const elapsedSinceLast = (Date.now() - state.lastCaptureTimestamp) / 1000;
         const cooldownRemaining = Math.max(0, state.cooldownSeconds - elapsedSinceLast);
         const cooldownPill = document.getElementById('cooldown-pill');
@@ -641,18 +928,17 @@
         }
       }
 
-      if (state.isRunning) {
-        state.rafId = requestAnimationFrame(detectFrameLoop);
+      if (state.isRunning && runId === state.runId) {
+        state.rafId = requestAnimationFrame(() => detectFrameLoop(runId));
       }
     }
 
     /**
-     * Draw high-contrast motorsport bounding boxes + confidence tags onto a 2D context
+     * Draw high-contrast motorsport bounding boxes + confidence tags onto overlay canvas
      */
     function drawDetectionsOnCanvas(ctx, width, height, detections) {
       ctx.clearRect(0, 0, width, height);
 
-      // Subtle centre road-corridor guide lines for windscreen alignment
       ctx.save();
       ctx.strokeStyle = 'rgba(245, 158, 11, 0.22)';
       ctx.lineWidth = Math.max(2, width * 0.002);
@@ -671,16 +957,13 @@
         const labelText = `${det.class.toUpperCase()} ${pct}%`;
         const boxColour = det.class === 'person' ? '#EF4444' : '#F59E0B';
 
-        // Outer bounding box
         ctx.strokeStyle = boxColour;
         ctx.lineWidth = Math.max(3, Math.round(width * 0.004));
         ctx.strokeRect(x, y, w, h);
 
-        // Semi-transparent fill tint
         ctx.fillStyle = det.class === 'person' ? 'rgba(239, 68, 68, 0.14)' : 'rgba(245, 158, 11, 0.14)';
         ctx.fillRect(x, y, w, h);
 
-        // Label badge background
         const fontSize = Math.max(14, Math.round(width * 0.018));
         ctx.font = `800 ${fontSize}px "JetBrains Mono", monospace`;
         const textMetrics = ctx.measureText(labelText);
@@ -693,45 +976,83 @@
         ctx.fillStyle = boxColour;
         ctx.fillRect(x, badgeY, badgeW, badgeH);
 
-        // Label text
         ctx.fillStyle = '#000000';
         ctx.fillText(labelText, x + padX, badgeY + fontSize + 1);
       });
     }
 
     /**
+     * Speed & Distance Helpers (MPH / KM/H)
+     */
+    function getDisplaySpeed(speedMps) {
+      if (speedMps === null || speedMps === undefined || Number.isNaN(speedMps)) return null;
+      const factor = state.speedUnit === 'KMH' ? 3.6 : 2.23694;
+      return Math.round(speedMps * factor);
+    }
+
+    function toggleSpeedUnit() {
+      state.speedUnit = state.speedUnit === 'MPH' ? 'KMH' : 'MPH';
+      syncSpeedUI();
+      syncDistanceUI();
+      saveSettings();
+    }
+
+    function syncSpeedUI() {
+      const unitLabel = state.speedUnit === 'KMH' ? 'KM/H' : 'MPH';
+      document.getElementById('tel-speed-unit').textContent = unitLabel;
+      const spd = getDisplaySpeed(state.gps.speedMps);
+      document.getElementById('tel-speed').textContent = spd !== null ? spd : '--';
+    }
+
+    function syncDistanceUI() {
+      const meters = state.gps.stageDistanceMeters;
+      const val = state.speedUnit === 'KMH' ? (meters / 1000) : (meters / 1609.344);
+      const unit = state.speedUnit === 'KMH' ? 'KM' : 'MI';
+      document.getElementById('tel-dist').textContent = `${val.toFixed(2)} ${unit}`;
+    }
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+      const toRad = (deg) => (deg * Math.PI) / 180;
+      const R = 6371000;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /**
      * Capture compressed JPEG snapshot (with burned-in bounding boxes) + GPS telemetry
      */
     function logSightingFromFrame(detections, isManualTest = false) {
-      // Trigger visual flash + cockpit audio ping
       viewportShell.classList.remove('flash-alert');
-      void viewportShell.offsetWidth; // trigger reflow
+      void viewportShell.offsetWidth;
       viewportShell.classList.add('flash-alert');
       playCockpitChime();
 
-      // Create compressed 480px wide JPEG thumbnail
       const targetW = 480;
-      const aspect = (videoEl.videoHeight && videoEl.videoWidth)
-        ? (videoEl.videoHeight / videoEl.videoWidth)
-        : (9 / 16);
+      const hasLiveVideo = videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0;
+      const aspect = hasLiveVideo ? (videoEl.videoHeight / videoEl.videoWidth) : (9 / 16);
       const targetH = Math.round(targetW * aspect);
 
       captureCanvas.width = targetW;
       captureCanvas.height = targetH;
 
-      if (videoEl.readyState >= 2) {
+      if (hasLiveVideo) {
         captureCtx.drawImage(videoEl, 0, 0, targetW, targetH);
-        // Scale bounding boxes to thumbnail resolution
-        const scaleX = targetW / overlayCanvas.width;
-        const scaleY = targetH / overlayCanvas.height;
-        const scaledDetections = detections.map(d => ({
-          ...d,
-          bbox: [d.bbox[0] * scaleX, d.bbox[1] * scaleY, d.bbox[2] * scaleX, d.bbox[3] * scaleY]
-        }));
-        // Burn boxes directly onto thumbnail (without clearing the photo underneath)
-        burnBoxesOntoSnapshot(captureCtx, targetW, scaledDetections);
+        const sourceW = overlayCanvas.width || videoEl.videoWidth;
+        const sourceH = overlayCanvas.height || videoEl.videoHeight;
+        const scaleX = targetW / sourceW;
+        const scaleY = targetH / sourceH;
+        const scaledDetections = isManualTest
+          ? [{ class: 'person', score: 0.94, bbox: [targetW * 0.34, targetH * 0.22, targetW * 0.25, targetH * 0.56] }]
+          : detections.map(d => ({
+              ...d,
+              bbox: [d.bbox[0] * scaleX, d.bbox[1] * scaleY, d.bbox[2] * scaleX, d.bbox[3] * scaleY]
+            }));
+        burnBoxesOntoSnapshot(captureCtx, scaledDetections);
       } else {
-        // Fallback dark test frame if user hits "+ Test Snap" while camera is off
         captureCtx.fillStyle = '#11161D';
         captureCtx.fillRect(0, 0, targetW, targetH);
         captureCtx.fillStyle = '#F59E0B';
@@ -739,11 +1060,14 @@
         captureCtx.fillText('TEST TELEMETRY SNAPSHOT', 24, targetH / 2);
       }
 
-      // Burn timestamp + speed watermark at bottom of thumbnail
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-GB', { hour12: false });
-      const speedLabel = state.gps.speedMph !== null ? `${state.gps.speedMph} MPH` : 'NO GPS SPD';
-      const coordLabel = state.gps.hasFix
+      const speedMph = state.gps.speedMps !== null ? Math.round(state.gps.speedMps * 2.23694) : null;
+      const speedKmh = state.gps.speedMps !== null ? Math.round(state.gps.speedMps * 3.6) : null;
+      const displaySpd = state.speedUnit === 'KMH' ? speedKmh : speedMph;
+      const unitLabel = state.speedUnit === 'KMH' ? 'KM/H' : 'MPH';
+      const speedLabel = displaySpd !== null ? `${displaySpd} ${unitLabel}` : 'NO GPS SPD';
+      const coordLabel = state.gps.hasFix && state.gps.lat !== null && state.gps.lon !== null
         ? `${state.gps.lat.toFixed(5)}, ${state.gps.lon.toFixed(5)}`
         : 'NO GPS FIX';
 
@@ -754,12 +1078,10 @@
       captureCtx.fillText(`${timeStr}  |  ${speedLabel}  |  ${coordLabel}`, 8, targetH - 8);
 
       const dataUrl = captureCanvas.toDataURL('image/jpeg', 0.76);
-
-      // Highest confidence match in this frame
       const topHit = detections.reduce((best, cur) => (cur.score > best.score ? cur : best), detections[0]);
 
       const record = {
-        id: Date.now() + Math.floor(Math.random() * 1000),
+        id: state.nextSightingId++,
         isoTime: now.toISOString(),
         displayTime: timeStr,
         label: isManualTest ? 'manual test' : topHit.class,
@@ -767,16 +1089,18 @@
         confidence: Math.round(topHit.score * 100),
         lat: state.gps.lat,
         lon: state.gps.lon,
-        speedMph: state.gps.speedMph,
+        speedMph,
+        speedKmh,
         accuracyM: state.gps.accuracyM,
         thumbnail: dataUrl
       };
 
       state.sightings.unshift(record);
+      saveSightings();
       renderSightingsLog();
     }
 
-    function burnBoxesOntoSnapshot(ctx, width, detections) {
+    function burnBoxesOntoSnapshot(ctx, detections) {
       detections.forEach(det => {
         const [x, y, w, h] = det.bbox;
         const pct = Math.round(det.score * 100);
@@ -807,7 +1131,7 @@
     function renderSightingsLog() {
       const listEl = document.getElementById('sightings-list');
       const countEl = document.getElementById('tel-count');
-      countEl.textContent = state.sightings.length;
+      countEl.textContent = String(state.sightings.length);
 
       if (state.sightings.length === 0) {
         listEl.innerHTML = `
@@ -820,20 +1144,24 @@
 
       listEl.innerHTML = state.sightings.map((item, idx) => {
         const num = state.sightings.length - idx;
-        const speedStr = item.speedMph !== null ? `${item.speedMph} MPH` : '-- MPH';
+        const speedVal = state.speedUnit === 'KMH' ? item.speedKmh : item.speedMph;
+        const unitLabel = state.speedUnit === 'KMH' ? 'KM/H' : 'MPH';
+        const speedStr = speedVal !== null && speedVal !== undefined ? `${speedVal} ${unitLabel}` : `-- ${unitLabel}`;
         const hasCoords = item.lat !== null && item.lon !== null;
         const coordsStr = hasCoords ? `${item.lat.toFixed(5)}, ${item.lon.toFixed(5)}` : 'No GPS lock';
         const mapLink = hasCoords
-          ? `<a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" rel="noopener" class="text-[11px] font-mono text-amberRally hover:underline">Map ↗</a>`
+          ? `<a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" rel="noopener noreferrer" class="text-[11px] font-mono text-amberRally hover:underline">Map ↗</a>`
           : '';
 
         return `
           <div class="bg-oled border border-panelBorder rounded-xl p-2.5 flex items-center gap-3">
-            <img src="${item.thumbnail}" alt="Sighting #${num}" class="w-24 h-16 object-cover rounded-lg border border-zinc-800 shrink-0" />
+            <button type="button" onclick="openSightingModal(${item.id})" class="shrink-0 rounded-lg overflow-hidden border border-zinc-800 hover:border-amberRally transition focus:outline-none">
+              <img src="${item.thumbnail}" alt="Sighting #${num}" class="w-24 h-16 object-cover block" />
+            </button>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
-                <span class="font-mono text-xs font-extrabold text-white uppercase">#${num} ${item.label} (${item.confidence}%)</span>
-                <span class="font-mono text-[11px] text-zinc-400">${item.displayTime}</span>
+                <span class="font-mono text-xs font-extrabold text-white uppercase truncate">#${num} ${escapeHtml(item.label)} (${item.confidence}%)</span>
+                <span class="font-mono text-[11px] text-zinc-400 shrink-0">${escapeHtml(item.displayTime)}</span>
               </div>
               <div class="flex items-center gap-2 mt-1 font-mono text-xs">
                 <span class="text-greenRally font-bold">${speedStr}</span>
@@ -842,7 +1170,7 @@
               </div>
               <div class="flex items-center justify-between mt-1">
                 ${mapLink || '<span></span>'}
-                <button onclick="deleteSighting(${item.id})" class="text-[11px] text-zinc-500 hover:text-redRally font-semibold">
+                <button type="button" onclick="deleteSighting(${item.id})" class="text-[11px] text-zinc-500 hover:text-redRally font-semibold">
                   Delete
                 </button>
               </div>
@@ -852,19 +1180,78 @@
       }).join('');
     }
 
+    function openSightingModal(id) {
+      const idx = state.sightings.findIndex(s => s.id === id);
+      if (idx === -1) return;
+      const item = state.sightings[idx];
+      const num = state.sightings.length - idx;
+      const hasCoords = item.lat !== null && item.lon !== null;
+      const speedVal = state.speedUnit === 'KMH' ? item.speedKmh : item.speedMph;
+      const unitLabel = state.speedUnit === 'KMH' ? 'KM/H' : 'MPH';
+
+      document.getElementById('modal-title').textContent = `#${num} ${item.label.toUpperCase()} (${item.confidence}%)`;
+      document.getElementById('modal-img').src = item.thumbnail;
+      document.getElementById('modal-meta').innerHTML = `
+        <div>Time: <span class="text-white">${escapeHtml(item.displayTime)}</span> (${escapeHtml(item.isoTime)})</div>
+        <div>Speed: <span class="text-greenRally font-bold">${speedVal ?? '--'} ${unitLabel}</span></div>
+        <div>GPS: <span class="text-white">${hasCoords ? `${item.lat.toFixed(6)}, ${item.lon.toFixed(6)}` : 'No GPS Fix'}</span>${item.accuracyM !== null ? ` (±${item.accuracyM}m)` : ''}</div>
+      `;
+
+      const mapLink = document.getElementById('modal-map-link');
+      if (hasCoords) {
+        mapLink.href = `https://www.google.com/maps?q=${item.lat},${item.lon}`;
+        mapLink.classList.remove('hidden');
+      } else {
+        mapLink.classList.add('hidden');
+      }
+
+      document.getElementById('modal-delete-btn').onclick = () => {
+        deleteSighting(item.id);
+        closeSightingModal();
+      };
+
+      document.getElementById('sighting-modal').classList.remove('hidden');
+    }
+
+    function closeSightingModal() {
+      document.getElementById('sighting-modal').classList.add('hidden');
+    }
+
     function deleteSighting(id) {
       state.sightings = state.sightings.filter(s => s.id !== id);
+      saveSightings();
       renderSightingsLog();
     }
 
-    function clearSightings() {
+    function handleClearSightingsClick() {
       if (state.sightings.length === 0) return;
+      const btn = document.getElementById('btn-clear-all');
+
+      if (btn.dataset.armed !== 'true') {
+        btn.dataset.armed = 'true';
+        btn.textContent = 'Confirm Clear?';
+        btn.className = 'text-xs font-extrabold text-white px-2.5 py-1.5 rounded-lg bg-redRally border border-redRally transition';
+        clearTimeout(state.clearConfirmTimer);
+        state.clearConfirmTimer = setTimeout(resetClearButton, 3000);
+        return;
+      }
+
+      clearTimeout(state.clearConfirmTimer);
+      resetClearButton();
       state.sightings = [];
+      saveSightings();
       renderSightingsLog();
+    }
+
+    function resetClearButton() {
+      const btn = document.getElementById('btn-clear-all');
+      btn.dataset.armed = 'false';
+      btn.textContent = 'Clear All';
+      btn.className = 'text-xs font-semibold text-redRally hover:text-red-400 px-2.5 py-1.5 rounded-lg bg-redRally/10 border border-redRally/30 transition';
     }
 
     /**
-     * Live GPS Geolocation Watcher (UK MPH Conversion)
+     * Live GPS Geolocation Watcher (Accurate null vs 0 speed + Stage Distance)
      */
     function startGPSWatcher() {
       const gpsBadge = document.getElementById('badge-gps');
@@ -878,23 +1265,33 @@
           const { latitude, longitude, speed, accuracy, heading } = pos.coords;
           state.gps.lat = latitude;
           state.gps.lon = longitude;
-          state.gps.accuracyM = accuracy !== null ? Math.round(accuracy) : null;
+          state.gps.accuracyM = accuracy !== null && !Number.isNaN(accuracy) ? Math.round(accuracy) : null;
           state.gps.heading = heading;
           state.gps.hasFix = true;
 
-          // Convert metres/second to UK Miles Per Hour (1 m/s = 2.23694 mph)
-          if (speed !== null && !Number.isNaN(speed)) {
-            state.gps.speedMph = Math.round(speed * 2.23694);
-          } else {
-            state.gps.speedMph = 0;
+          state.gps.speedMps = (speed !== null && !Number.isNaN(speed) && speed >= 0) ? speed : null;
+
+          if (state.isRunning && (state.gps.accuracyM === null || state.gps.accuracyM <= 50)) {
+            if (state.gps.lastTrackLat !== null && state.gps.lastTrackLon !== null) {
+              const stepM = haversineMeters(state.gps.lastTrackLat, state.gps.lastTrackLon, latitude, longitude);
+              if (stepM >= 3 && stepM <= 500) {
+                state.gps.stageDistanceMeters += stepM;
+                state.gps.lastTrackLat = latitude;
+                state.gps.lastTrackLon = longitude;
+                syncDistanceUI();
+              }
+            } else {
+              state.gps.lastTrackLat = latitude;
+              state.gps.lastTrackLon = longitude;
+            }
           }
 
-          document.getElementById('tel-speed').textContent = state.gps.speedMph;
+          syncSpeedUI();
           document.getElementById('tel-acc').textContent = state.gps.accuracyM !== null ? `±${state.gps.accuracyM}` : '--';
           document.getElementById('tel-coords').textContent = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
 
           gpsBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-greenRally/40 text-greenRally';
-          gpsBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-greenRally"></span><span>GPS: ±${state.gps.accuracyM || '?'}M</span>`;
+          gpsBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-greenRally"></span><span>GPS: ±${state.gps.accuracyM ?? '?'}M</span>`;
         },
         (err) => {
           console.warn('GPS warning:', err.message);
@@ -913,11 +1310,15 @@
      * Screen Wake Lock API (Prevents windscreen mount auto-sleep)
      */
     async function requestWakeLock() {
-      if (!('wakeLock' in navigator)) return;
+      if (!('wakeLock' in navigator) || state.wakeLock) return;
       try {
-        state.wakeLock = await navigator.wakeLock.request('screen');
+        const sentinel = await navigator.wakeLock.request('screen');
+        state.wakeLock = sentinel;
         updateWakeLockUI(true);
-        state.wakeLock.addEventListener('release', () => {
+        sentinel.addEventListener('release', () => {
+          if (state.wakeLock === sentinel) {
+            state.wakeLock = null;
+          }
           updateWakeLockUI(false);
         });
       } catch (err) {
@@ -926,17 +1327,25 @@
     }
 
     async function releaseWakeLock() {
-      if (state.wakeLock) {
-        await state.wakeLock.release();
-        state.wakeLock = null;
+      const sentinel = state.wakeLock;
+      state.wakeLock = null;
+      if (sentinel) {
+        try {
+          await sentinel.release();
+        } catch (_) {}
       }
       updateWakeLockUI(false);
     }
 
     function toggleWakeLock() {
       state.wakeLockEnabled = !state.wakeLockEnabled;
+      saveSettings();
       if (state.wakeLockEnabled) {
-        requestWakeLock();
+        if (state.isRunning) {
+          requestWakeLock();
+        } else {
+          updateWakeLockUI(false);
+        }
       } else {
         releaseWakeLock();
       }
@@ -969,19 +1378,16 @@
         if (AudioCtx) state.audioCtx = new AudioCtx();
       }
       if (state.audioCtx && state.audioCtx.state === 'suspended') {
-        state.audioCtx.resume();
+        state.audioCtx.resume().catch(() => {});
       }
     }
 
-    function toggleAudio() {
-      state.audioEnabled = !state.audioEnabled;
+    function syncAudioUI() {
       const btn = document.getElementById('btn-audio');
       const icon = document.getElementById('audio-icon');
       const label = document.getElementById('audio-label');
 
       if (state.audioEnabled) {
-        initAudioContext();
-        playCockpitChime();
         btn.className = 'py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-amberRally/50 text-amberRally font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition';
         icon.textContent = '🔊';
         label.textContent = 'CHIME: ON';
@@ -989,6 +1395,16 @@
         btn.className = 'py-3.5 px-3 rounded-2xl bg-panel hover:bg-zinc-900 border border-panelBorder text-zinc-400 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition';
         icon.textContent = '🔇';
         label.textContent = 'CHIME: OFF';
+      }
+    }
+
+    function toggleAudio() {
+      state.audioEnabled = !state.audioEnabled;
+      syncAudioUI();
+      saveSettings();
+      if (state.audioEnabled) {
+        initAudioContext();
+        playCockpitChime();
       }
     }
 
@@ -1022,15 +1438,16 @@
     function updateConfidence(val) {
       state.confidenceThreshold = Number(val) / 100;
       document.getElementById('val-conf').textContent = `${val}%`;
+      saveSettings();
     }
 
     function updateCooldown(val) {
       state.cooldownSeconds = Number(val);
       document.getElementById('val-cool').textContent = `${Number(val).toFixed(1)}s`;
+      saveSettings();
     }
 
-    function toggleExtraHazards() {
-      state.includeExtraHazards = !state.includeExtraHazards;
+    function syncHazardsUI() {
       const btn = document.getElementById('btn-hazards');
       const knob = document.getElementById('hazards-knob');
       btn.setAttribute('aria-checked', String(state.includeExtraHazards));
@@ -1042,6 +1459,12 @@
         btn.className = 'w-12 h-7 rounded-full bg-zinc-800 border border-zinc-700 p-1 transition flex items-center';
         knob.className = 'w-5 h-5 rounded-full bg-zinc-400 translate-x-0 transition-transform';
       }
+    }
+
+    function toggleExtraHazards() {
+      state.includeExtraHazards = !state.includeExtraHazards;
+      syncHazardsUI();
+      saveSettings();
     }
 
     /**
@@ -1071,11 +1494,13 @@
       }
 
       const waypointsXml = validGpsItems.slice().reverse().map((s, idx) => {
-        const speedText = s.speedMph !== null ? `${s.speedMph} MPH` : 'Unknown speed';
+        const speedText = s.speedMph !== null && s.speedMph !== undefined ? `${s.speedMph} MPH` : 'Unknown speed';
+        const name = escapeXml(`Spot #${idx + 1}: ${s.label.toUpperCase()} (${s.confidence}%)`);
+        const desc = escapeXml(`Detected ${s.label} (${s.confidence}% confidence) at ${speedText} on ${s.displayTime}`);
         return `  <wpt lat="${s.lat.toFixed(6)}" lon="${s.lon.toFixed(6)}">
-    <time>${s.isoTime}</time>
-    <name>Spot #${idx + 1}: ${s.label.toUpperCase()} (${s.confidence}%)</name>
-    <desc>Detected ${s.label} (${s.confidence}% confidence) at ${speedText} on ${s.displayTime}</desc>
+    <time>${escapeXml(s.isoTime)}</time>
+    <name>${name}</name>
+    <desc>${desc}</desc>
     <sym>Flag, Red</sym>
   </wpt>`;
       }).join('\n');
@@ -1098,7 +1523,7 @@ ${waypointsXml}
         return;
       }
 
-      const headers = ['Sighting_No', 'ISO_Timestamp', 'Local_Time', 'Object_Class', 'Confidence_Pct', 'Speed_MPH', 'Latitude', 'Longitude', 'Accuracy_Metres', 'Google_Maps_URL'];
+      const headers = ['Sighting_No', 'ISO_Timestamp', 'Local_Time', 'Object_Class', 'Confidence_Pct', 'Speed_MPH', 'Speed_KMH', 'Latitude', 'Longitude', 'Accuracy_Metres', 'Google_Maps_URL'];
       const rows = state.sightings.slice().reverse().map((s, idx) => {
         const mapsUrl = (s.lat !== null && s.lon !== null) ? `https://www.google.com/maps?q=${s.lat},${s.lon}` : '';
         return [
@@ -1108,11 +1533,12 @@ ${waypointsXml}
           s.label,
           s.confidence,
           s.speedMph ?? '',
+          s.speedKmh ?? '',
           s.lat ?? '',
           s.lon ?? '',
           s.accuracyM ?? '',
           mapsUrl
-        ].join(',');
+        ].map(escapeCsv).join(',');
       });
 
       const csvContent = [headers.join(','), ...rows].join('\n');
@@ -1128,17 +1554,19 @@ ${waypointsXml}
       const cardsHtml = state.sightings.slice().reverse().map((s, idx) => {
         const hasCoords = s.lat !== null && s.lon !== null;
         const coordText = hasCoords ? `${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}` : 'No GPS Fix';
+        const speedVal = state.speedUnit === 'KMH' ? s.speedKmh : s.speedMph;
+        const unitLabel = state.speedUnit === 'KMH' ? 'KM/H' : 'MPH';
         const mapBtn = hasCoords
-          ? `<a href="https://www.google.com/maps?q=${s.lat},${s.lon}" target="_blank" style="display:inline-block;margin-top:8px;padding:6px 12px;background:#F59E0B;color:#000;font-weight:700;text-decoration:none;border-radius:6px;font-size:12px;">Open in Google Maps ↗</a>`
+          ? `<a href="https://www.google.com/maps?q=${s.lat},${s.lon}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;padding:6px 12px;background:#F59E0B;color:#000;font-weight:700;text-decoration:none;border-radius:6px;font-size:12px;">Open in Google Maps ↗</a>`
           : '';
 
         return `
           <div style="background:#0B0D10;border:1px solid #1E242D;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;">
             <img src="${s.thumbnail}" alt="Sighting ${idx + 1}" style="width:100%;height:auto;display:block;border-bottom:1px solid #1E242D;" />
             <div style="padding:14px;">
-              <div style="font-family:monospace;font-size:14px;font-weight:800;color:#EF4444;">#${idx + 1} — ${s.label.toUpperCase()} (${s.confidence}%)</div>
-              <div style="font-family:monospace;font-size:12px;color:#A1A1AA;margin-top:4px;">Time: ${s.displayTime} | Speed: ${s.speedMph ?? '--'} MPH</div>
-              <div style="font-family:monospace;font-size:12px;color:#E4E4E7;margin-top:4px;">GPS: ${coordText}</div>
+              <div style="font-family:monospace;font-size:14px;font-weight:800;color:#EF4444;">#${idx + 1} — ${escapeHtml(s.label.toUpperCase())} (${s.confidence}%)</div>
+              <div style="font-family:monospace;font-size:12px;color:#A1A1AA;margin-top:4px;">Time: ${escapeHtml(s.displayTime)} | Speed: ${speedVal ?? '--'} ${unitLabel}</div>
+              <div style="font-family:monospace;font-size:12px;color:#E4E4E7;margin-top:4px;">GPS: ${escapeHtml(coordText)}</div>
               ${mapBtn}
             </div>
           </div>`;
@@ -1154,7 +1582,7 @@ ${waypointsXml}
 <body style="background:#000;color:#F4F4F5;font-family:system-ui,-apple-system,sans-serif;margin:0;padding:24px;">
   <div style="max-width:1000px;margin:0 auto;">
     <h1 style="margin:0 0 6px;font-size:24px;">STAGE<span style="color:#F59E0B;">EYE</span> AI — Post-Run Sightings Report</h1>
-    <p style="margin:0 0 24px;color:#A1A1AA;font-size:14px;">Generated ${new Date().toLocaleString('en-GB')} • Total Logged Sightings: ${state.sightings.length}</p>
+    <p style="margin:0 0 24px;color:#A1A1AA;font-size:14px;">Generated ${escapeHtml(new Date().toLocaleString('en-GB'))} • Total Logged Sightings: ${state.sightings.length}</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;">
       ${cardsHtml}
     </div>
